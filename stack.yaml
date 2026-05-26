@@ -1,0 +1,24 @@
+version: 1.0
+provider:
+  name: openfaas
+
+functions:
+  release-watcher:
+    lang: python3-http
+    handler: ./release-watcher
+    image: ${REGISTRY:-ttl.sh}/${OWNER:-openfaas-fn}/release-watcher:${TAG:-latest}
+    environment:
+      # GitHub repository to watch in the form "owner/repo", e.g. "openfaas/faas"
+      WATCH_REPO: ${WATCH_REPO:-openfaas/faas}
+    secrets:
+      - github-token
+      - discord-webhook-url
+      - pg-conn
+    annotations:
+      topic: cron-function
+      schedule: ${CRON_SCHEDULE:-0 0 * * *}
+
+configuration:
+  templates:
+    - name: python3-http
+      source: https://github.com/openfaas/python-flask-template

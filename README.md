@@ -7,13 +7,12 @@ OpenFaaS function that monitors GitHub releases and posts notifications to Disco
 - Polls GitHub API for the latest release of a configured repository
 - Stores state in PostgreSQL to avoid duplicate notifications
 - Posts rich Discord embeds with release details
-- Runs on a schedule via OpenFaaS cron-connector (default: daily at midnight UTC)
-- Supports GitHub authentication to avoid rate-limiting
+- Runs on a schedule via OpenFaaS cron-connector (default: 3 times per day)
 
 ## Architecture
 
 ```
-cron-connector (daily at midnight UTC)
+cron-connector (3x per day)
        │
        ▼
 release-watcher (Python)
@@ -30,7 +29,6 @@ release-watcher (Python)
 - OpenFaaS (faasd or Kubernetes)
 - PostgreSQL database
 - Discord webhook URL
-- (Optional) GitHub Personal Access Token for higher rate limits
 
 ## Deploy
 
@@ -45,11 +43,7 @@ Create the following secrets before deploying:
 faas-cli secret create discord-webhook-url \
   --from-literal "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
 
-# 2. GitHub token (optional but recommended)
-faas-cli secret create github-token \
-  --from-literal "ghp_YOUR_GITHUB_TOKEN"
-
-# 3. PostgreSQL connection string (URL-encoded password)
+# 2. PostgreSQL connection string
 faas-cli secret create pg-conn \
   --from-literal "postgresql://USER:PASSWORD@host:5432/dbname"
 ```
@@ -61,7 +55,7 @@ The function uses environment variable substitution. Set these when deploying:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WATCH_REPO` | `openfaas/faas` | GitHub repository to watch (format: `owner/repo`) |
-| `CRON_SCHEDULE` | `0 0 * * *` | Cron schedule (daily at midnight UTC) |
+| `CRON_SCHEDULE` | `0 */8 * * *` | Cron schedule (every 8 hours: midnight, 8am, 4pm UTC) |
 | `REGISTRY` | `ttl.sh` | Container registry |
 | `OWNER` | `openfaas-fn` | Registry namespace/owner |
 
@@ -114,7 +108,6 @@ If the function returns an error, the response body will contain details:
 
 Common issues:
 - **Postgres connection errors**: Verify the `pg-conn` secret is correct
-- **GitHub rate-limiting**: Add a `github-token` secret (see [Deploy](#deploy))
 - **Discord errors**: Verify the `discord-webhook-url` secret is correct
 
 ## License

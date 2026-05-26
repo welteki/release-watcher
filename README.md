@@ -68,7 +68,8 @@ The function uses environment variable substitution. Set these when deploying:
 Override at deploy time:
 
 ```bash
-WATCH_REPO=openfaas/faas REGISTRY=ghcr.io OWNER=youruser faas-cli up -f stack.yaml --tag=digest
+WATCH_REPO=openfaas/faas REGISTRY=ghcr.io OWNER=youruser \
+  faas-cli up -f stack.yaml --tag=digest
 ```
 
 Use [crontab.guru](https://crontab.guru) to validate cron expressions.

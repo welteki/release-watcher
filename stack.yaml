@@ -11,12 +11,11 @@ functions:
       # GitHub repository to watch in the form "owner/repo", e.g. "openfaas/faas"
       WATCH_REPO: ${WATCH_REPO:-openfaas/faas}
     secrets:
-      - github-token
       - discord-webhook-url
       - pg-conn
     annotations:
       topic: cron-function
-      schedule: ${CRON_SCHEDULE:-0 0 * * *}
+      schedule: ${CRON_SCHEDULE:-0 */8 * * *}
 
 configuration:
   templates:

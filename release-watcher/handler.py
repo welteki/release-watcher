@@ -48,11 +48,9 @@ def upsert_last_tag(conn, repo, tag):
     conn.commit()
 
 
-def fetch_latest_release(repo, github_token):
+def fetch_latest_release(repo):
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     headers = {"Accept": "application/vnd.github+json"}
-    if github_token and not github_token.startswith("ghp_REPLACE"):
-        headers["Authorization"] = f"Bearer {github_token}"
     resp = requests.get(url, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()
@@ -80,34 +78,11 @@ def post_discord(webhook_url, repo, release):
 
 
 def handle(event, context):
-    repo = os.environ.get("WATCH_REPO", "").strip()
-    if not repo:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": "WATCH_REPO environment variable is not set"}),
-            "headers": {"Content-Type": "application/json"},
-        }
-
-    github_token = read_secret("github-token")
+    repo = os.getenv("WATCH_REPO", "openfaas/faas")
     discord_webhook_url = read_secret("discord-webhook-url")
-    pg_conn_str = read_secret("pg-conn")
+    pg_conn_string = read_secret("pg-conn")
 
-    if not discord_webhook_url:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": "discord-webhook-url secret is missing"}),
-            "headers": {"Content-Type": "application/json"},
-        }
-    if not pg_conn_str:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": "pg-conn secret is missing"}),
-            "headers": {"Content-Type": "application/json"},
-        }
-
-    # Fetch latest GitHub release
-    try:
-        release = fetch_latest_release(repo, github_token)
+    release = fetch_latest_release(repo)
     except requests.HTTPError as e:
         return {
             "statusCode": 502,

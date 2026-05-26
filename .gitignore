@@ -1,12 +1,3 @@
-# Local dev secrets — never commit these
-.secrets/
-
-# OpenFaaS build artefacts
-build/
-template/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
+template
+build
+.secrets

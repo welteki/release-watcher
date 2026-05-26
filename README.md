@@ -15,7 +15,7 @@ OpenFaaS function that monitors GitHub releases and posts notifications to Disco
 cron-connector (3x per day)
        │
        ▼
-release-watcher (Python)
+release-watcher
        │
        ├─► GitHub API  →  fetch latest release
        │
@@ -43,9 +43,9 @@ Create the following secrets before deploying:
 faas-cli secret create discord-webhook-url \
   --from-literal "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
 
-# 2. PostgreSQL connection string
-faas-cli secret create pg-conn \
-  --from-literal "postgresql://USER:PASSWORD@host:5432/dbname"
+# 2. PostgreSQL password
+faas-cli secret create postgres-passwd \
+  --from-literal "your-postgres-password"
 ```
 
 ### Environment Variables
@@ -58,11 +58,15 @@ The function uses environment variable substitution. Set these when deploying:
 | `CRON_SCHEDULE` | `0 */8 * * *` | Cron schedule (every 8 hours: midnight, 8am, 4pm UTC) |
 | `REGISTRY` | `ttl.sh` | Container registry |
 | `OWNER` | `openfaas-fn` | Registry namespace/owner |
+| `POSTGRES_HOST` | `postgresql` | PostgreSQL host |
+| `POSTGRES_PORT` | `5432` | PostgreSQL port |
+| `POSTGRES_USER` | `postgres` | PostgreSQL user |
+| `POSTGRES_DB` | `postgres` | PostgreSQL database name |
 
 Override at deploy time:
 
 ```bash
-WATCH_REPO=openfaas/faas REGISTRY=ghcr.io OWNER=youruser \
+WATCH_REPO=kubernetes/kubernetes REGISTRY=ghcr.io OWNER=youruser \
   faas-cli up -f stack.yaml --tag=digest
 ```
 
@@ -73,22 +77,10 @@ Use [crontab.guru](https://crontab.guru) to validate cron expressions.
 Invoke the function manually to test:
 
 ```bash
-curl -s http://gateway:8080/function/release-watcher | jq
+curl http://gateway:8080/function/release-watcher
 ```
 
-The response shows whether a notification was sent:
-
-```json
-{
-  "repo": "openfaas/faas",
-  "latest_tag": "0.27.13",
-  "previous_tag": "0.27.13",
-  "notified": false
-}
-```
-
-- `notified: true` — new release detected, Discord notification sent
-- `notified: false` — no new release since last check
+The function will check for new releases and post to Discord if one is found.
 
 ## Troubleshooting
 
@@ -98,16 +90,8 @@ Check the function logs:
 faas-cli logs release-watcher
 ```
 
-If the function returns an error, the response body will contain details:
-
-```json
-{
-  "error": "Postgres error: ..."
-}
-```
-
 Common issues:
-- **Postgres connection errors**: Verify the `pg-conn` secret is correct
+- **Postgres connection errors**: Verify the `postgres-passwd` secret and environment variables (`POSTGRES_HOST`, `POSTGRES_USER`, etc.) are correct
 - **Discord errors**: Verify the `discord-webhook-url` secret is correct
 
 ## License

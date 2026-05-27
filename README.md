@@ -4,9 +4,9 @@ OpenFaaS function that monitors GitHub releases and posts notifications to Disco
 
 ## Features
 
-- Polls GitHub API for the latest release of a configured repository
+- Polls GitHub for the latest release of a configured repository
 - Stores state in PostgreSQL to avoid duplicate notifications
-- Posts rich Discord embeds with release details
+- Posts latest release url to Discord
 - Runs on a schedule via OpenFaaS cron-connector (default: 3 times per day)
 
 ## Architecture
@@ -17,7 +17,7 @@ cron-connector (3x per day)
        ▼
 release-watcher
        │
-       ├─► GitHub API  →  fetch latest release
+       ├─► GitHub  →  fetch latest release url
        │
        ├─► Postgres    →  read/write last-seen release tag
        │

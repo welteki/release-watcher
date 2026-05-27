@@ -2,6 +2,7 @@ package function
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,15 +10,19 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 )
 
+const userAgent = "release-monitor"
+
 var (
 	repo              string
 	discordWebhookURL string
 	db                *sql.DB
+	githubClient      *http.Client
 )
 
 func init() {
@@ -49,43 +54,32 @@ func init() {
 	if err := ensureTable(db); err != nil {
 		log.Fatalf("Error creating table during init: %v", err)
 	}
-}
 
-type GitHubRelease struct {
-	TagName     string    `json:"tag_name"`
-	Name        string    `json:"name"`
-	HTMLURL     string    `json:"html_url"`
-	Body        string    `json:"body"`
-	PublishedAt time.Time `json:"published_at"`
-	Author      struct {
-		Login string `json:"login"`
-	} `json:"author"`
-}
-
-type DiscordEmbed struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-	Color       int    `json:"color"`
-	Timestamp   string `json:"timestamp"`
-	Footer      struct {
-		Text string `json:"text"`
-	} `json:"footer"`
+	// Initialize HTTP client for GitHub (no redirect following)
+	githubClient = &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 type DiscordWebhook struct {
-	Content string         `json:"content"`
-	Embeds  []DiscordEmbed `json:"embeds"`
+	Content string `json:"content"`
 }
 
 func Handle(w http.ResponseWriter, r *http.Request) {
-	// Fetch latest release from GitHub
-	release, err := fetchLatestRelease(repo)
+	ctx := r.Context()
+
+	// Fetch latest releaseURL url from GitHub
+	releaseURL, err := fetchLatestReleaseURL(ctx, repo)
 	if err != nil {
 		log.Printf("Error fetching release: %v", err)
 		http.Error(w, fmt.Sprintf("Error fetching release: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	tagName := releaseURL[strings.LastIndex(releaseURL, "/")+1:]
 
 	// Get last seen tag from database
 	lastTag, err := getLastTag(db, repo)
@@ -95,31 +89,29 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lastTag == release.TagName {
-		msg := fmt.Sprintf("No new release for %s (current: %s)", repo, release.TagName)
+	if lastTag == tagName {
+		msg := fmt.Sprintf("No new release for %s (current: %s)", repo, tagName)
 		log.Println(msg)
-		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(msg))
 		return
 	}
 
 	// Post to Discord
-	if err := postToDiscord(discordWebhookURL, repo, release); err != nil {
+	if err := postToDiscord(ctx, discordWebhookURL, releaseURL); err != nil {
 		log.Printf("Error posting to Discord: %v", err)
 		http.Error(w, fmt.Sprintf("Discord webhook error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Update last seen tag
-	if err := updateLastTag(db, repo, release.TagName); err != nil {
+	if err := updateLastTag(db, repo, tagName); err != nil {
 		log.Printf("Error updating last tag: %v", err)
 		http.Error(w, fmt.Sprintf("Database update error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	msg := fmt.Sprintf("Posted new release %s for %s to Discord", release.TagName, repo)
+	msg := fmt.Sprintf("Posted new release %s for %s to Discord", tagName, repo)
 	log.Println(msg)
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(msg))
 }
 
@@ -139,32 +131,31 @@ func readSecret(name string) string {
 	return string(bytes.TrimSpace(data))
 }
 
-func fetchLatestRelease(repo string) (*GitHubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	req, err := http.NewRequest("GET", url, nil)
+func fetchLatestReleaseURL(ctx context.Context, repo string) (string, error) {
+	url := fmt.Sprintf("https://github.com/%s/releases/latest", repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	res, err := githubClient.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, err
+	if res.StatusCode != http.StatusFound {
+		io.Copy(io.Discard, res.Body)
+		return "", fmt.Errorf("GitHub returned uunexpected status: %d", res.StatusCode)
 	}
 
-	return &release, nil
+	releaseURL := res.Header.Get("Location")
+	if len(releaseURL) == 0 {
+		return "", fmt.Errorf("unable to determine latest release")
+	}
+
+	return releaseURL, nil
 }
 
 func ensureTable(db *sql.DB) error {
@@ -198,26 +189,9 @@ func updateLastTag(db *sql.DB, repo, tag string) error {
 	return err
 }
 
-func postToDiscord(webhookURL, repo string, release *GitHubRelease) error {
-	description := release.Body
-	if description == "" {
-		description = "_No release notes provided._"
-	} else if len(description) > 300 {
-		description = description[:300] + "…"
-	}
-
-	embed := DiscordEmbed{
-		Title:       fmt.Sprintf("New release: %s %s", repo, release.TagName),
-		Description: description,
-		URL:         release.HTMLURL,
-		Color:       0x3CB371, // MediumSeaGreen
-		Timestamp:   release.PublishedAt.Format(time.RFC3339),
-	}
-	embed.Footer.Text = fmt.Sprintf("Released by %s", release.Author.Login)
-
+func postToDiscord(ctx context.Context, webhookURL string, release string) error {
 	webhook := DiscordWebhook{
-		Content: fmt.Sprintf("New release for **%s**: %s", repo, release.TagName),
-		Embeds:  []DiscordEmbed{embed},
+		Content: release,
 	}
 
 	payload, err := json.Marshal(webhook)
@@ -225,15 +199,22 @@ func postToDiscord(webhookURL, repo string, release *GitHubRelease) error {
 		return err
 	}
 
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Content-Type", "application/json")
 
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Discord webhook returned %d: %s", resp.StatusCode, string(body))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode >= 400 {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("Discord webhook returned %d: %s", res.StatusCode, string(body))
 	}
 
 	return nil

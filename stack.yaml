@@ -11,6 +11,7 @@ functions:
     annotations:
       topic: cron-function
       schedule: ${CRON_SCHEDULE:-0 */8 * * *}
+      com.openfaas.ready.http.path: "/ready"
     environment:
       watch_repo: ${WATCH_REPO:-openfaas/faas}
       postgres_host: ${POSTGRES_HOST:-postgresql}

@@ -70,6 +70,13 @@ type DiscordWebhook struct {
 }
 
 func Handle(w http.ResponseWriter, r *http.Request) {
+	// Custom readiness endpoint
+	// If this handler can respond, it means init() has completed successfully
+	// and the HTTP server is ready to process requests.
+	if r.URL.Path == "/ready" {
+		return
+	}
+
 	ctx := r.Context()
 
 	// Fetch latest releaseURL url from GitHub

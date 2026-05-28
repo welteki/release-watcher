@@ -5,7 +5,7 @@ provider:
 
 functions:
   release-watcher:
-    lang: golang-middleware
+    lang: golang-middleware-inproc
     handler: ./release-watcher
     image: ${SERVER:-ttl.sh}/${OWNER:-openfaas}/release-watcher:${TAG:-latest}
     annotations:
@@ -23,5 +23,5 @@ functions:
 
 configuration:
   templates:
-    - name: golang-middleware
+    - name: golang-middleware-inproc
       source: https://github.com/openfaas/golang-http-template

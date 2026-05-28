@@ -7,7 +7,7 @@ functions:
   release-watcher:
     lang: golang-middleware
     handler: ./release-watcher
-    image: ${REGISTRY:-ttl.sh}/${OWNER:-openfaas-fn}/release-watcher:latest
+    image: ${SERVER:-ttl.sh}/${OWNER:-openfaas}/release-watcher:${TAG:-latest}
     annotations:
       topic: cron-function
       schedule: ${CRON_SCHEDULE:-0 */8 * * *}
@@ -18,7 +18,7 @@ functions:
       postgres_user: ${POSTGRES_USER:-postgres}
       postgres_db: ${POSTGRES_DB:-postgres}
     secrets:
-      - discord-webhook-url
+      - releases-discord-webhook-url
       - postgres-passwd
 
 configuration:

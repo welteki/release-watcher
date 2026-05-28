@@ -40,7 +40,7 @@ Create the following secrets before deploying:
 
 ```bash
 # 1. Discord webhook URL
-faas-cli secret create discord-webhook-url \
+faas-cli secret create releases-discord-webhook-url \
   --from-literal "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
 
 # 2. PostgreSQL password
@@ -56,8 +56,9 @@ The function uses environment variable substitution. Set these when deploying:
 |----------|---------|-------------|
 | `WATCH_REPO` | `openfaas/faas` | GitHub repository to watch (format: `owner/repo`) |
 | `CRON_SCHEDULE` | `0 */8 * * *` | Cron schedule (every 8 hours: midnight, 8am, 4pm UTC) |
-| `REGISTRY` | `ttl.sh` | Container registry |
-| `OWNER` | `openfaas-fn` | Registry namespace/owner |
+| `SERVER` | `ttl.sh` | Container registry |
+| `OWNER` | `openfaas` | Registry namespace/owner |
+| `TAG` | `latest` | Image tag |
 | `POSTGRES_HOST` | `postgresql` | PostgreSQL host |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_USER` | `postgres` | PostgreSQL user |
@@ -66,8 +67,8 @@ The function uses environment variable substitution. Set these when deploying:
 Override at deploy time:
 
 ```bash
-WATCH_REPO=kubernetes/kubernetes REGISTRY=ghcr.io OWNER=youruser \
-  faas-cli up -f stack.yaml --tag=digest
+WATCH_REPO=kubernetes/kubernetes SERVER=ghcr.io OWNER=youruser TAG=1.0.0\
+  faas-cli up -f stack.yaml
 ```
 
 Use [crontab.guru](https://crontab.guru) to validate cron expressions.
@@ -92,7 +93,7 @@ faas-cli logs release-watcher
 
 Common issues:
 - **Postgres connection errors**: Verify the `postgres-passwd` secret and environment variables (`POSTGRES_HOST`, `POSTGRES_USER`, etc.) are correct
-- **Discord errors**: Verify the `discord-webhook-url` secret is correct
+- **Discord errors**: Verify the `releases-discord-webhook-url` secret is correct
 
 ## License
 

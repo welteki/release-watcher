@@ -28,7 +28,7 @@ var (
 func init() {
 	repo = getEnv("watch_repo", "openfaas/faas")
 	log.Printf("Watching repository: %s", repo)
-	discordWebhookURL = readSecret("discord-webhook-url")
+	discordWebhookURL = readSecret("releases-discord-webhook-url")
 	postgresPassword := readSecret("postgres-passwd")
 
 	// Build Postgres connection string from environment variables
